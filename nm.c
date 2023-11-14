@@ -10,9 +10,29 @@ typedef struct details{
     int client_port_no;
 }details;
 details ss_dets[100];
+char **gettokens(char *token)
+{
+  int count;
+  char **argv = malloc(sizeof(char *) * 1000);
+  for (int i = 0; i < 1000; i++)
+  {
+    argv[i] = malloc(sizeof(char) * 10000);
+  }
+  count = 0;
+
+  char *arg = strtok_r(token, " \t", &token);
+  while (arg != NULL)
+  {
+    argv[count++] = arg;
+    char *msd = strtok_r(NULL, " \t", &token);
+    arg = msd;
+  }
+  argv[count] = NULL;
+  return argv;
+}
 int main() {
 
-  char *ip = "10.2.133.160";
+  char *ip = "127.0.0.1";
   int port = 5000;
 
   int server_sock, ss_sock;
@@ -56,18 +76,20 @@ int main() {
     
     // Error handling for recv() call
     bzero(buffer, 1024);
-    // n = recv(client_sock, buffer, sizeof(buffer), 0);
-    // if (n < 0) {
-    //   perror("Recv error");
-    //   exit(1);
-    // }
     recv(ss_sock, &ss_dets[ss_count], sizeof(details), 0);
     printf("ss %d ip: %s\n",ss_count,ss_dets[ss_count].ip);
     printf("ss %d port_no: %d\n",ss_count,ss_dets[ss_count].port_no);
     printf("ss %d list_of_paths: %s\n",ss_count,ss_dets[ss_count].list_of_accesible_paths);
     printf("ss %d client_port_no: %d\n",ss_count,ss_dets[ss_count].client_port_no);
-    strcpy(buffer,"CREATE file test/");
-    n = send(ss_sock, buffer, strlen(buffer), 0);
+    // strcpy(buffer,"CREATE file test/");
+    fgets(buffer,1000,stdin);
+    char **argv2 = malloc(sizeof(char *) * 1000);
+  for (int i = 0; i < 1000; i++)
+  {
+    argv2[i] = malloc(sizeof(char) * 1000);
+  }
+  argv2=gettokens(buffer);
+    n = send(ss_sock, argv2, strlen(buffer), 0);
     if (n < 0) {
         perror("Send error");
         exit(1);
