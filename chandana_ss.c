@@ -38,7 +38,7 @@ void create_func(char **argv2)
     int stat = mkdir(kris, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     if (stat == 0)
     {
-      printf("mkdir is succesfully updated");
+      printf("mkdi;r is succesfully updated");
     }
   }
   if (strcmp(argv2[1], "-f") == 0)
@@ -87,7 +87,7 @@ void listFiles(const char *path)
   if ((dir = opendir(path)) == NULL)
   {
     perror("opendir");
-    exit(EXIT_FAILURE);
+    exit(1);
   }
   int i = 0;
   while ((entry = readdir(dir)) != NULL)
@@ -232,45 +232,69 @@ void read_func(string *buffer, int soc)
 
 void copy_func(string *buffer)
 {
-  string source_path = buffer[1];
-  string destination_path = buffer[2];
-  int source_file = open(source_path, O_RDONLY);
-  if (source_file == -1)
-  {
-    perror("Error opening source file");
-    exit(EXIT_FAILURE);
-  }
+  string source = buffer[1];
+  string destination = buffer[2];
+  struct stat stat_source;
+  stat(source, &stat_source);
 
-  int destination_file = open(destination_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if (destination_file == -1)
-  {
-    perror("Error opening destination file");
-    exit(EXIT_FAILURE);
-  }
+  if (S_ISDIR(stat_source.st_mode)) {
+    // If the source is a directory, create the corresponding directory in the destination
+    mkdir(destination, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
-  char buf[BUFSIZ];
-  ssize_t bytes_read;
-  while ((bytes_read = read(source_file, buf, BUFSIZ)) > 0)
-  {
-    if (write(destination_file, buf, bytes_read) != bytes_read)
-    {
-      perror("Write error");
-      exit(EXIT_FAILURE);
+    DIR *dir = opendir(source);
+    if (dir == NULL) {
+      perror("Error opening source directory");
+      exit(1);
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+      if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+        continue;
+      }
+
+      char source_child[1024];
+      char destination_child[1024];
+      snprintf(source_child, 1024, "%s/%s", source, entry->d_name);
+      snprintf(destination_child, 1024, "%s/%s", destination, entry->d_name);
+
+      copyFileOrDirectory(source_child, destination_child);
+    }
+
+    closedir(dir);
+  } else {
+    // If the source is a file, copy it to the destination
+    int source_file = open(source, O_RDONLY);
+    if (source_file == -1) {
+      perror("Error opening source file");
+      exit(1);
+    }
+
+    int destination_file = open(destination, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (destination_file == -1) {
+      perror("Error opening destination file");
+      exit(1);
+    }
+
+    char buf[BUFSIZ];
+    ssize_t bytes_read;
+    while ((bytes_read = read(source_file, buf, BUFSIZ)) > 0) {
+      if (write(destination_file, buf, bytes_read) != bytes_read) {
+        perror("Write error");
+        exit(1);
+      }
+    }
+
+    if (bytes_read == -1) {
+      perror("Read error");
+      exit(1);
+    }
+
+    if (close(source_file) == -1 || close(destination_file) == -1) {
+      perror("Close error");
+      exit(1);
     }
   }
-
-  if (bytes_read == -1)
-  {
-    perror("Read error");
-    exit(EXIT_FAILURE);
-  }
-
-  if (close(source_file) == -1 || close(destination_file) == -1)
-  {
-    perror("Close error");
-    exit(EXIT_FAILURE);
-  }
-  printf("File copied successfully.\n");
 }
 void write_func(string *buffer, int soc)
 {

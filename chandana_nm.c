@@ -10,6 +10,7 @@
 int server_sock;
 socklen_t addr_size;
 #define BUFFER_SIZE 1000
+// #define MAX_PATH_LENGTH 1000
 typedef char* string;
 typedef struct details
 {
@@ -25,6 +26,107 @@ details ss_dets[100];
 int ss_count=0;
 int client_sock[1000];
 struct sockaddr_in client_addr[1000];
+#define CACHE_SIZE 10
+
+typedef struct CacheNode {
+    char* path;
+    char* data;
+    struct CacheNode* next;
+    struct CacheNode* prev;
+} CacheNode;
+
+typedef struct {
+    int size;
+    int capacity;
+    CacheNode* head;
+    CacheNode* tail;
+} LRUCache;
+
+// Define error codes
+#define FILE_NOT_FOUND_ERROR 404
+#define FILE_IN_USE_ERROR 409
+#define GENERIC_ERROR 500
+
+// Function to handle errors and send corresponding error codes
+// Function to send an error code to the client
+void sendErrorToClient(int clientSocket, int errorCode) {
+    int error = htonl(errorCode);
+    send(clientSocket, &error, sizeof(error), 0);
+}
+
+LRUCache* createCache() {
+    LRUCache* cache = (LRUCache*)malloc(sizeof(LRUCache));
+    cache->size = 0;
+    cache->capacity = CACHE_SIZE;
+    cache->head = NULL;
+    cache->tail = NULL;
+    return cache;
+}
+
+void addToCache(LRUCache* cache, char* path, char* data) {
+    CacheNode* newNode = (CacheNode*)malloc(sizeof(CacheNode));
+    newNode->path = strdup(path);
+    newNode->data = strdup(data);
+    newNode->next = NULL;
+    newNode->prev = NULL;
+
+    if (cache->size == 0) {
+        cache->head = newNode;
+        cache->tail = newNode;
+        cache->size++;
+        return;
+    }
+
+    // Remove the oldest entry if the cache is full
+    if (cache->size >= cache->capacity) {
+        CacheNode* temp = cache->tail;
+        cache->tail = temp->prev;
+        if (cache->tail != NULL) {
+            cache->tail->next = NULL;
+        }
+        free(temp->path);
+        free(temp->data);
+        free(temp);
+        cache->size--;
+    }
+
+    // Add the new entry to the front
+    newNode->next = cache->head;
+    if (cache->head != NULL) {
+        cache->head->prev = newNode;
+    }
+    cache->head = newNode;
+    cache->size++;
+}
+
+char* fetchFromCache(LRUCache* cache, char* path) {
+    CacheNode* curr = cache->head;
+
+    while (curr != NULL) {
+        if (strcmp(curr->path, path) == 0) {
+            // Move the accessed node to the front (most recently used)
+            if (curr != cache->head) {
+                if (curr == cache->tail) {
+                    cache->tail = curr->prev;
+                    cache->tail->next = NULL;
+                } else {
+                    curr->prev->next = curr->next;
+                    curr->next->prev = curr->prev;
+                }
+                curr->next = cache->head;
+                curr->prev = NULL;
+                cache->head->prev = curr;
+                cache->head = curr;
+            }
+            return curr->data; // Return the cached data
+        }
+        curr = curr->next;
+    }
+
+    return NULL; // Data not found in cache
+}
+
+
 char **gettokens(char *token)
 {
   int count;
@@ -194,6 +296,77 @@ void *receive_buffer(void *arg) {
     handle_client(buffer,count);
   }
 }
+
+
+void handleClientWithCache(char* buffer, int count, LRUCache* cache) {
+    char** tokens = malloc(sizeof(char*) * 1000);
+    for (int i = 0; i < 1000; i++) {
+        tokens[i] = malloc(sizeof(char) * 1000);
+    }
+    tokens = gettokens(buffer);
+    string req_path = tokens[1];
+    int i;
+    int index;
+    for (i = 0; i < ss_count; i++) {
+        index = -1;
+        int j = 0;
+        while (1) {
+            if (strcmp(ss_dets[i].list_of_accesible_paths[j], req_path) == 0) {
+                index = j;
+                break;
+            }
+            j++;
+        }
+    }
+
+    if (strcmp(tokens[0], "READ") == 0 || strcmp(tokens[0], "WRITE") == 0 || strcmp(tokens[0], "GET_DETAILS") == 0) {
+      //  if (file_not_found_condition) {
+      //       sendErrorToClient(client_sock[count], 404);
+      //   } else if (access_denied_condition) {
+      //       sendErrorToClient(client_sock[count], 409);
+      //   } else if (server_unavailable_condition) {
+      //       sendErrorToClient(client_sock[count],500);
+      //   } else {
+        char* cachedData = fetchFromCache(cache, req_path);
+        if (cachedData != NULL) {
+            // Data found in cache (cache hit)
+            printf("Cache Hit: Returning data from cache to the client...\n");
+            send(client_sock[count], cachedData, strlen(cachedData), 0);
+        } else {
+            // Data not found in cache (cache miss)
+            printf("Cache Miss: Proceeding with request handling...\n");
+            int ss_port = ss_dets[index].port_no;
+            char* ip_add = ss_dets[index].ip;
+
+            client_sock[count] = accept(server_sock, (struct sockaddr *)&client_addr[count], &addr_size);
+            int n = send(client_sock[count], ip_add, strlen(ip_add), 0);
+            if (n < 0) {
+                perror("send");
+            }
+            n = send(client_sock[count], &ss_port, sizeof(ss_port), 0);
+            if (n < 0) {
+                perror("send");
+            // }
+            // Wait for acknowledgment from the storage server.
+            // On receiving the data, update the cache.
+            // Example: char receivedData[BUFFER_SIZE];
+            // recv(client_sock[count], receivedData, sizeof(receivedData), 0);
+            // addToCache(cache, req_path, receivedData);
+        }}
+    } else {
+        // Handle other types of requests without using cache
+        //  if (file_not_found_condition) {
+        //     sendErrorToClient(client_sock[count], 404);
+        // } else if (access_denied_condition) {
+        //     sendErrorToClient(client_sock[count], 409);
+        // } else if (server_unavailable_condition) {
+        //     sendErrorToClient(client_sock[count], 500);
+        // } else {
+        printf("Handling other types of requests without using cache...\n");
+        // Example: Send the request directly to the storage server without caching
+    }}
+// }
+
 
 int main()
 {
