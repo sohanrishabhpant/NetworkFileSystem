@@ -82,7 +82,7 @@ void handle_client(char* buffer,int count){
     {
       perror("send");
     }
-    n = send(client_sock[count], &ss_port, strlen(ss_port), 0);
+    n = send(client_sock[count], &ss_port, sizeof(ss_port), 0);
     if (n<0)
     {
       perror("send");
@@ -112,7 +112,7 @@ void handle_client(char* buffer,int count){
   }
   printf("Connected to the naming server.\n");
 tokenised token;
-token.buffer=buffer;
+token.buffer=tokens;
 if( send(new_sock,(void*)&token, sizeof(token),0) < 0 ) {
     printf("send failed!\n");
 }
@@ -124,7 +124,7 @@ if( send(new_sock,(void*)&token, sizeof(token),0) < 0 ) {
 
 void *receive_buffer(void *arg) {
   // Code to receive buffer from client
-  char buffer[1000];
+  char buffer[1024];
   // Error handling for listen() call
   listen(server_sock, 1000);
   int count=0;
@@ -139,10 +139,6 @@ void *receive_buffer(void *arg) {
     handle_client(buffer,count);
   }
 }
-void *accept_ss(void *arg) {
-
-}
-
 
 int main()
 {

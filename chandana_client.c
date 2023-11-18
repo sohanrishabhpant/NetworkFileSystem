@@ -18,6 +18,10 @@ int main() {
     printf("Enter source path, destination path, and action (copy_file or copy_folder): ");
     fgets(buffer, sizeof(buffer), stdin);
     buffer[strcspn(buffer, "\n")] = '\0'; // Removing trailing newline character
+    // if (strstr(buffer,"WRITE")==0)
+    // {
+        
+    // }
     
     // Error handling for socket() call
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -107,9 +111,11 @@ int main() {
             // Here, you can handle the received data accordingly
         }
     }
-
-    // Close the socket to the Storage Server
-    close(ss_sock);
+    // char text_to_write[1024];
+    // strcpy(text_to_write,"This is a test message for the storage server.");
+    // send(ss_sock,buffer,sizeof(buffer),0);
+    // // Close the socket to the Storage Server
+    // close(ss_sock);
 
     return 0;
 }
